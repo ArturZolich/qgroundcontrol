@@ -107,7 +107,8 @@ Item {
         z:                      widgetLayer.z + 1
 
         insetsToView:           customOverlay.totalToolInsets
-    }*/
+    }
+    */
 
     GuidedActionsController {
         id:                 guidedActionsController
@@ -162,6 +163,10 @@ Item {
         id: videoControl
     }
 
+    FlyViewChart { // Zolich
+        id: flyChart
+    }
+
     QGCPipOverlay {
         id:                     _pipOverlay
         anchors.left:           parent.left
@@ -169,10 +174,11 @@ Item {
         anchors.margins:        _toolsMargin
         item1IsFullSettingsKey: "MainFlyWindowIsMap"
         item1:                  mapControl
-        item2:                  QGroundControl.videoManager.hasVideo ? videoControl : null
+        item2:                  flyChart //QGroundControl.videoManager.hasVideo ? flyChart : null //videoControl : null // null // Zolich
         fullZOrder:             _fullItemZorder
         pipZOrder:              _pipItemZorder
         show:                   !QGroundControl.videoManager.fullScreen &&
-                                    (videoControl.pipState.state === videoControl.pipState.pipState || mapControl.pipState.state === mapControl.pipState.pipState)
+                                    (flyChart.pipState.state === flyChart.pipState.pipState || mapControl.pipState.state === mapControl.pipState.pipState) // Zolich
     }
+
 }
