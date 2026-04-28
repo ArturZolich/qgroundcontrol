@@ -11,4 +11,4 @@ docker build \
   -t "${IMAGE_NAME}" \
   "${SOURCE_DIR}"
 
-SOURCE_DIR="${SOURCE_DIR}" "${SCRIPT_DIR}/docker-run.sh" --fuse "${IMAGE_NAME}" "${BUILD_TYPE}"
+#SOURCE_DIR="${SOURCE_DIR}" "${SCRIPT_DIR}/docker-run.sh" --fuse "${IMAGE_NAME}" "${BUILD_TYPE}"

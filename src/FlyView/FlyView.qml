@@ -87,6 +87,11 @@ Item {
             id:         videoControl
             pipView:    _pipView
         }
+        
+        FlyViewChart { // Zolich
+            id: flyChart
+            pipView:    _pipView
+        }
 
         PipView {
             id:                     _pipView
@@ -95,9 +100,9 @@ Item {
             anchors.margins:        _toolsMargin
             item1IsFullSettingsKey: "MainFlyWindowIsMap"
             item1:                  mapControl
-            item2:                  QGroundControl.videoManager.hasVideo ? videoControl : null
-            show:                   QGroundControl.videoManager.hasVideo && !QGroundControl.videoManager.fullScreen &&
-                                        (videoControl.pipState.state === videoControl.pipState.pipState || mapControl.pipState.state === mapControl.pipState.pipState)
+            item2:                  flyChart
+            show:                   !QGroundControl.videoManager.fullScreen &&
+                                        (flyChart.pipState.state === flyChart.pipState.pipState || mapControl.pipState.state === mapControl.pipState.pipState)
             z:                      QGroundControl.zOrderWidgets
 
             property real leftEdgeBottomInset: visible ? width + anchors.margins : 0

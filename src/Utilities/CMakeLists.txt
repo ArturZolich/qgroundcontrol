@@ -8,6 +8,8 @@
 # ----------------------------------------------------------------------------
 target_sources(${CMAKE_PROJECT_NAME}
     PRIVATE
+        SpectralLogController.cc
+        SpectralLogController.h
         DeviceInfo.cc
         DeviceInfo.h
         JsonHelper.cc

@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
+echo "Na to wychodzi"
+
 BUILD_TYPE="${1:-${BUILD_TYPE:-Release}}"
 ANDROID_ABIS="${ANDROID_ABIS:-arm64-v8a}"  # Options: arm64-v8a, armeabi-v7a, or both with semicolon
 

@@ -42,6 +42,7 @@
 #include "Vehicle.h"
 #include "VehicleComponent.h"
 #include "VideoManager.h"
+#include "SpectralLogController.h"
 
 #ifndef QGC_NO_SERIAL_LINK
 #include "SerialLink.h"
@@ -97,6 +98,8 @@ QGCApplication::QGCApplication(int &argc, char *argv[], const QGCCommandLinePars
     setOrganizationDomain(QGC_ORG_DOMAIN);
     setApplicationVersion(QString(QGC_APP_VERSION_STR));
 
+    qmlRegisterType<SpectralLogController>("Custom", 1, 0, "SpectralLogger");
+    
     // Set settings format
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings settings;
@@ -151,12 +154,15 @@ QGCApplication::QGCApplication(int &argc, char *argv[], const QGCCommandLinePars
     // Set up our logging filters
     QGCLoggingCategoryManager::init();
     QGCLoggingCategoryManager::instance()->installFilter(loggingOptions);
+    
 
     // We need to set language as early as possible prior to loading on JSON files.
     setLanguage();
 
     // Force old SVG Tiny 1.2 behavior for compatibility
     QSvgRenderer::setDefaultOptions(QtSvg::Tiny12FeaturesOnly);
+    
+    
 
 #ifndef QGC_DAILY_BUILD
     _checkForNewVersion();

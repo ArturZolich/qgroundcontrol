@@ -55,5 +55,8 @@ WORKDIR /project/build
 COPY deploy/docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-ENTRYPOINT ["/bin/bash", "-l", "/entrypoint.sh"]
-CMD ["Release"]
+#ENTRYPOINT ["/bin/bash", "-l", "/entrypoint.sh"]
+#CMD ["Release"]
+
+    # ---------- Entrypoint ----------
+ENTRYPOINT ["/bin/bash"]
