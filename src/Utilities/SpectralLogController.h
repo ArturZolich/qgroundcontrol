@@ -16,9 +16,14 @@ public:
 
     Q_INVOKABLE void startSession();
     Q_INVOKABLE void stopSession();
-	Q_INVOKABLE void logSpectrum(const QVariantList& data1,
-								const QVariantList& data2,
-								const QVariantList& reflectance);
+	Q_INVOKABLE void logSpectrum(
+                                const QVariantList& data1,
+                                const QVariantList& data2,
+                                const QVariantList& reflectance,
+                                const QVariantMap& meta1,
+                                const QVariantMap& meta2);
+    Q_INVOKABLE void saveMetaJSON(const QString& json);
+
 								
 
 private:

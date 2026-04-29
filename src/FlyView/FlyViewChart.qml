@@ -34,13 +34,18 @@ Item {
 		
 	
 	Component.onCompleted: {
-		var v = QGroundControl.multiVehicleManager.activeVehicle
-		if (v) {
-			logger.setVehicle(v)
-		}
+        var v = QGroundControl.multiVehicleManager.activeVehicle
+        if (v)
+            logger.setVehicle(v)
 
-		logger.startSession()
-	}
+        logger.startSession()
+
+        fetchAllMeta(function(meta) {
+		    meta.timestamp = new Date().toISOString()
+            logger.saveMetaJSON(JSON.stringify(meta))
+        })
+    }
+
 	
 	Component.onDestruction: {
 		logger.stopSession()
@@ -48,6 +53,9 @@ Item {
 	
     property Item pipView
     property Item pipState: chartPipState
+    property bool isPip: chartPipState.state === chartPipState.pipState
+
+
 
     PipState {
         id: chartPipState
@@ -72,7 +80,7 @@ Item {
     ChartView {
         id: chartView
         anchors.fill: parent
-        anchors.topMargin: toolbar.height
+        anchors.topMargin: isPip ? 0 : toolbar.height
         antialiasing: true
         title: "Calibrated Data"
 		backgroundColor: "white"						
@@ -200,44 +208,237 @@ Item {
         }
     }
 
-	function loadData() {
-		var data1 = null
-		var data2 = null
+function fetchJSONWithRetry(url, retries, delayMs, callback) {
+    var attempt = 0
 
-		var done1 = false
-		var done2 = false
+    function tryFetch() {
+        var xhr = new XMLHttpRequest()
 
-		function tryProcess() {
-			if (done1 && done2) {
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
 
-				var d1 = data1 || []
-				var d2 = data2 || []
+                if (xhr.status === 200) {
+                    try {
+                        var obj = JSON.parse(xhr.responseText)
+                        callback(obj)
+                        return
+                    } catch (e) {
+                        console.log("JSON parse error:", url)
+                    }
+                }
 
-				var result = computeSpectra(d1, d2)
+                attempt++
+                if (attempt < retries) {
+                    console.log("Retry", attempt, url)
+                    Qt.createQmlObject(
+                        'import QtQuick 2.0; Timer { interval: ' + delayMs + '; running: true; repeat: false; onTriggered: tryFetch(); }',
+                        _root
+                    )
+                } else {
+                    console.log("Failed after retries:", url)
+                    callback(null)
+                }
+            }
+        }
 
-				// log once, using computed reflectance
-				logger.logSpectrum(d1, d2, result.reflectance)
+        xhr.open("GET", url)
+        xhr.send()
+    }
 
-				// render
-				updateChart(result)
-			}
-		}
+    tryFetch()
+}
 
-		fetchCSV("http://192.168.144.213/dyn/spectrum.csv?type=measure",
-			function (d) {
-				data1 = d
-				done1 = true
-				tryProcess()
-			})
 
-		fetchCSV("http://192.168.144.136/dyn/spectrum.csv?type=measure",
-			function (d) {
-				data2 = d
-				done2 = true
-				tryProcess()
-			})
-	}
-		
+////////////////////////////////////////////////
+
+function fetchDeviceMeta(ip, callback) {
+
+    var base = "http://" + ip + "/dyn/load.jsn?file="
+
+    var result = {}
+    var done = 0
+
+    function checkDone() {
+        done++
+        if (done === 3)
+            callback(result)
+    }
+
+    fetchJSONWithRetry(base + "params.jsn", 5, 1000, function (d) {
+        result.params = d
+        checkDone()
+    })
+
+    fetchJSONWithRetry(base + "config.jsn", 5, 1000, function (d) {
+        result.config = d
+        checkDone()
+    })
+
+    fetchJSONWithRetry(base + "system.jsn", 5, 1000, function (d) {
+        result.system = d
+        checkDone()
+    })
+}
+
+////////////////////////////
+
+function fetchAllMeta(callback) {
+
+    var result = {}
+    var done = 0
+
+    function checkDone() {
+        done++
+        if (done === 2)
+            callback(result)
+    }
+
+    fetchDeviceMeta("192.168.144.213", function (d) {
+        result.device_213 = d
+        checkDone()
+    })
+
+    fetchDeviceMeta("192.168.144.136", function (d) {
+        result.device_136 = d
+        checkDone()
+    })
+}
+
+
+property var lastMeasurement213: ""
+property var lastMeasurement136: "" 
+
+function flattenMeasurement(json) {
+    var result = {}
+
+    for (var key in json) {
+        var obj = json[key]
+
+        for (var sub in obj) {
+            var flatKey = key.replace(/\s+/g, "_") + "_" + sub
+            result[flatKey] = obj[sub]
+        }
+    }
+
+    return result
+}
+
+
+
+function fetchMeasurement(ip, callback) {
+    var url = "http://" + ip + "/dyn/load.jsn?file=measurement.jsn"
+
+    fetchJSONWithRetry(url, 3, 500, function (json) {
+        if (!json) {
+            callback(null, null)
+            return
+        }
+
+        var raw = JSON.stringify(json)
+        var flat = flattenMeasurement(json)
+
+        callback(raw, flat)
+    })
+}
+
+
+    function loadData() {
+
+        var device213 = {}
+        var device136 = {}
+
+        var done1 = false
+        var done2 = false
+
+        function tryProcess() {
+            if (done1 && done2) {
+
+                // Only proceed if at least one device changed
+                if (!device213.changed && !device136.changed) {
+                    console.log("No measurement change → skip")
+                    return
+                }
+
+                var d1 = device213.csv || []
+                var d2 = device136.csv || []
+
+                var result = computeSpectra(d1, d2)
+
+                logger.logSpectrumExtended(
+                    d1,
+                    d2,
+                    result.reflectance,
+                    device213.meta,
+                    device136.meta
+                )
+
+                updateChart(result)
+            }
+        }
+
+        // --- DEVICE 213 ---
+        fetchMeasurement("192.168.144.213", function (raw, flat) {
+
+            if (!raw) {
+                done1 = true
+                tryProcess()
+                return
+            }
+
+            var changed = (raw !== lastMeasurement213)
+
+            device213.meta = flat
+            device213.changed = changed
+
+            if (changed) {
+                lastMeasurement213 = raw
+
+                fetchCSV("http://192.168.144.213/dyn/spectrum.csv?type=measure",
+                    function (d) {
+                        device213.csv = d
+                        done1 = true
+                        tryProcess()
+                    })
+            } else {
+                device213.csv = null
+                done1 = true
+                tryProcess()
+            }
+        })
+
+        // --- DEVICE 136 ---
+        fetchMeasurement("192.168.144.136", function (raw, flat) {
+
+            if (!raw) {
+                done2 = true
+                tryProcess()
+                return
+            }
+
+            var changed = (raw !== lastMeasurement136)
+
+            device136.meta = flat
+            device136.changed = changed
+
+            if (changed) {
+                lastMeasurement136 = raw
+
+                fetchCSV("http://192.168.144.136/dyn/spectrum.csv?type=measure",
+                    function (d) {
+                        device136.csv = d
+                        done2 = true
+                        tryProcess()
+                    })
+            } else {
+                device136.csv = null
+                done2 = true
+                tryProcess()
+            }
+        })
+    }
+
+
+		    
 	
     function fetchCSV(url, callback) {
         var xhr = new XMLHttpRequest()

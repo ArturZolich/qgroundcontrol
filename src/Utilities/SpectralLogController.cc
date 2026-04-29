@@ -18,6 +18,33 @@ void SpectralLogController::setVehicle(Vehicle* vehicle)
     _vehicle = vehicle;
 }
 
+
+
+void SpectralLogController::saveMetaJSON(const QString& json)
+{
+    if (!_sessionActive)
+        return;
+
+    QString path = _file.fileName();
+
+    QString metaPath = path;
+    metaPath.replace(".csv", "_meta.json");
+
+    QFile f(metaPath);
+
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        qWarning() << "Failed to write meta JSON:" << f.errorString();
+        return;
+    }
+
+    f.write(json.toUtf8());
+    f.close();
+
+    qDebug() << "Saved meta JSON:" << metaPath;
+}
+
+
+
 QString SpectralLogController::_createFilePath()
 {
     QString dirPath =
@@ -75,7 +102,9 @@ void SpectralLogController::stopSession()
 
 void SpectralLogController::logSpectrum(const QVariantList& data1,
                                         const QVariantList& data2,
-								        const QVariantList& reflectance)
+								        const QVariantList& reflectance,
+								        const QVariantMap& meta1,
+                                        const QVariantMap& meta2)
 {
     if (!_sessionActive || !_vehicle)
         return;
@@ -134,6 +163,19 @@ void SpectralLogController::logSpectrum(const QVariantList& data1,
 	  << satellites << ","
 	  << hdop << ","
 	  << vdop << "\n";
+
+
+    s << "#RADIANCE_METADATA";
+    for (auto it = meta1.begin(); it != meta1.end(); ++it) {
+        s << "," << it.key() << "=" << it.value().toString();
+    }
+    s << "\n";
+
+    s << "#IRRADIANCE_METADATA";
+    for (auto it = meta2.begin(); it != meta2.end(); ++it) {
+        s << "," << it.key() << "=" << it.value().toString();
+    }
+    s << "\n";
 
 	// --- RADIOMETRIC DATA SIZES ---
 
