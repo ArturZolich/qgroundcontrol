@@ -362,8 +362,16 @@ Item {
         anchors.topMargin: isPip ? 0 : toolbar.height
         antialiasing: true
         title: "Calibrated Data"
-        backgroundColor: "white"
-        titleFont: Qt.font({ "family": "Helvetica", "pointSize": 18, "bold": true })
+
+        // Bind the background color to the RC switch state
+        // When switch is high, background is light red/pink. Otherwise, white.
+        backgroundColor: logger.triggerActive ? "#ffe6e6" : "white"
+
+        titleFont: Qt.font({
+                               "family": "Helvetica",
+                               "pointSize": 18,
+                               "bold": true
+                           })
 
         ValueAxis {
             id: axisX

@@ -15,9 +15,45 @@ SpectralLogController::SpectralLogController(QObject* parent)
 
 void SpectralLogController::setVehicle(Vehicle* vehicle)
 {
+    if (_vehicle) {
+        // Disconnect the old vehicle's MAVLink stream
+        disconnect(_vehicle, &Vehicle::mavlinkMessageReceived, this, &SpectralLogController::_onMavlinkMessageReceived);
+    }
+
     _vehicle = vehicle;
+
+    if (_vehicle) {
+        // Connect the new vehicle's MAVLink stream
+        connect(_vehicle, &Vehicle::mavlinkMessageReceived, this, &SpectralLogController::_onMavlinkMessageReceived);
+    }
 }
 
+void SpectralLogController::_onMavlinkMessageReceived(const mavlink_message_t& message)
+{
+    // Filter out everything except the RC_CHANNELS message
+    if (message.msgid == MAVLINK_MSG_ID_RC_CHANNELS) {
+
+        mavlink_rc_channels_t rc;
+        mavlink_msg_rc_channels_decode(&message, &rc);
+
+        // MAVLink explicitly defines variables for 18 channels.
+        // If you mapped your switch to Channel 8, we look at chan8_raw.
+        // A value of 0 or 65535 usually means the channel is inactive/unplugged.
+        int pwm = rc.chan11_raw;
+
+        // Safely check if the channel is active and above our switch threshold
+        bool isActive = (pwm > _triggerThreshold && pwm < 2500);
+
+        // Only trigger UI updates/signals if the state actually flipped
+        if (isActive != _triggerActive) {
+            _triggerActive = isActive;
+            emit triggerActiveChanged();
+
+            // Optional: Good for debugging on the bench
+            qDebug() << "RC Trigger changed state to:" << _triggerActive << "PWM:" << pwm;
+        }
+    }
+}
 
 
 void SpectralLogController::saveMetaJSON(const QString& json)
@@ -150,11 +186,12 @@ void SpectralLogController::logSpectrum(const QVariantList& data1,
         }
     }
 
-            // --- VEHICLE HEADER ---
+    // --- VEHICLE HEADER ---
+    // Added 'rc_trigger' to the end of the header
     s << "#VEHICLE,"
-      << "timestamp,armed,mode,lat,lon,alt,roll,pitch,yaw,satellites,hdop,vdop\n";
+      << "timestamp,armed,mode,lat,lon,alt,roll,pitch,yaw,satellites,hdop,vdop,rc_trigger\n";
 
-            // --- VEHICLE DATA ---
+    // --- VEHICLE DATA ---
     s << "#DATA,"
       << ts << ","
       << (armed ? 1 : 0) << ","
@@ -167,7 +204,8 @@ void SpectralLogController::logSpectrum(const QVariantList& data1,
       << yaw << ","
       << satellites << ","
       << hdop << ","
-      << vdop << "\n";
+      << vdop << ","
+      << (_triggerActive ? 1 : 0) << "\n"; // 1 if switch is flipped, 0 if not
 
             // --- RADIOMETRIC METADATA ---
     s << "#RADIANCE_METADATA";
