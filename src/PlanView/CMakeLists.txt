@@ -19,7 +19,6 @@ qt_add_qml_module(PlanViewModule
         FWLandingPatternMapVisual.qml
         GeoFenceEditor.qml
         GeoFenceMapVisuals.qml
-        MissionDefaultsEditor.qml
         MissionItemEditor.qml
         MissionItemIndexLabel.qml
         MissionItemMapVisual.qml

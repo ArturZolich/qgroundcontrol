@@ -8,31 +8,10 @@
 # ----------------------------------------------------------------------------
 target_sources(${CMAKE_PROJECT_NAME}
     PRIVATE
-<<<<<<< HEAD
         SpectralLogController.cc
         SpectralLogController.h
-        DeviceInfo.cc
-        DeviceInfo.h
-        JsonHelper.cc
-        JsonHelper.h
-        FileSystem/QGCCachedFileDownload.cc
-        FileSystem/QGCCachedFileDownload.h
-        FileSystem/QGCFileDownload.cc
-        FileSystem/QGCFileDownload.h
-        FileSystem/QGCFileHelper.cc
-        FileSystem/QGCFileHelper.h
-        FileSystem/QGCArchiveWatcher.cc
-        FileSystem/QGCArchiveWatcher.h
-        FileSystem/QGCFileWatcher.cc
-        FileSystem/QGCFileWatcher.h
-        FileSystem/QGCFileWriter.cc
-        FileSystem/QGCFileWriter.h
-        QGC.cc
-        QGC.h
-=======
         AppMessages.cc
         AppMessages.h
->>>>>>> master
         QGCCommandLineParser.cc
         QGCCommandLineParser.h
 )
