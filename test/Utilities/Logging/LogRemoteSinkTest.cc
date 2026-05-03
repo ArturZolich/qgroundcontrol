@@ -4,23 +4,14 @@
 #include <QtCore/QJsonObject>
 #include <QtNetwork/QUdpSocket>
 #include <QtTest/QSignalSpy>
-#include <QtTest/QTest>
 
 #include "LogEntry.h"
 #include "LogRemoteSink.h"
+#include "LogTestHelpers.h"
 #include "TransportStrategy.h"
 #include "UnitTestList.h"
 
-static LogEntry makeEntry(const QString& msg, LogEntry::Level level = LogEntry::Info)
-{
-    LogEntry e;
-    e.timestamp = QDateTime::currentDateTime();
-    e.level = level;
-    e.category = QStringLiteral("Test");
-    e.message = msg;
-    e.buildFormatted();
-    return e;
-}
+using LogTestHelpers::makeEntry;
 
 void LogRemoteSinkTest::_defaultState()
 {
@@ -106,7 +97,7 @@ void LogRemoteSinkTest::_sendBatching()
     sink.send(makeEntry(QStringLiteral("batch test")));
 
     // Wait for batch timer to flush (200ms default + margin)
-    QTRY_VERIFY_WITH_TIMEOUT(receiver.hasPendingDatagrams(), 1000);
+    QTRY_VERIFY_WITH_TIMEOUT(receiver.hasPendingDatagrams(), TestTimeout::shortMs());
 
     QByteArray datagram;
     datagram.resize(receiver.pendingDatagramSize());
@@ -156,7 +147,7 @@ void LogRemoteSinkTest::_compressionToggle()
 
     sink.send(makeEntry(QStringLiteral("compressed message")));
 
-    QTRY_VERIFY_WITH_TIMEOUT(receiver.hasPendingDatagrams(), 1000);
+    QTRY_VERIFY_WITH_TIMEOUT(receiver.hasPendingDatagrams(), TestTimeout::shortMs());
 
     QByteArray datagram;
     datagram.resize(receiver.pendingDatagramSize());
@@ -201,7 +192,7 @@ void LogRemoteSinkTest::_resetBytesSent()
 
     sink.send(makeEntry(QStringLiteral("count bytes")));
 
-    QTRY_VERIFY_WITH_TIMEOUT(sink.bytesSent() > 0, 1000);
+    QTRY_VERIFY_WITH_TIMEOUT(sink.bytesSent() > 0, TestTimeout::shortMs());
 
     sink.resetBytesSent();
     QCOMPARE(sink.bytesSent(), 0ULL);
@@ -222,7 +213,7 @@ void LogRemoteSinkTest::_vehicleIdInPayload()
 
     sink.send(makeEntry(QStringLiteral("with vehicle id")));
 
-    QTRY_VERIFY_WITH_TIMEOUT(receiver.hasPendingDatagrams(), 1000);
+    QTRY_VERIFY_WITH_TIMEOUT(receiver.hasPendingDatagrams(), TestTimeout::shortMs());
 
     QByteArray datagram;
     datagram.resize(receiver.pendingDatagramSize());

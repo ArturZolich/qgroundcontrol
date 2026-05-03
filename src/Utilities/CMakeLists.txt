@@ -8,6 +8,7 @@
 # ----------------------------------------------------------------------------
 target_sources(${CMAKE_PROJECT_NAME}
     PRIVATE
+<<<<<<< HEAD
         SpectralLogController.cc
         SpectralLogController.h
         DeviceInfo.cc
@@ -28,6 +29,10 @@ target_sources(${CMAKE_PROJECT_NAME}
         FileSystem/QGCFileWriter.h
         QGC.cc
         QGC.h
+=======
+        AppMessages.cc
+        AppMessages.h
+>>>>>>> master
         QGCCommandLineParser.cc
         QGCCommandLineParser.h
 )
@@ -36,11 +41,6 @@ target_include_directories(${CMAKE_PROJECT_NAME}
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
         Compression
-        FileSystem
-        Parsing
-        Parsing/DataFlash
-        Parsing/Exif
-        Parsing/ULog
 )
 
 # ============================================================================
@@ -50,9 +50,14 @@ target_include_directories(${CMAKE_PROJECT_NAME}
 add_subdirectory(Logging)
 add_subdirectory(Audio)
 add_subdirectory(Compression)
+add_subdirectory(Database)
+add_subdirectory(FileSystem)
+add_subdirectory(Format)
 add_subdirectory(Geo)
+add_subdirectory(Math)
 add_subdirectory(Network)
 add_subdirectory(Parsing)
 add_subdirectory(Platform)
 add_subdirectory(SDL)
+add_subdirectory(Sensors)
 add_subdirectory(StateMachine)

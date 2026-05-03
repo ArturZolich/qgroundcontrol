@@ -2,19 +2,16 @@
 
 #include "QGCMAVLink.h"
 
-#include <QtCore/QLoggingCategory>
 #include <QtCore/QObject>
 #include <QtCore/QThread>
 #include <QtCore/QVariantMap>
 #include <QtGui/QVector3D>
 #include <QtQmlIntegration/QtQmlIntegration>
 
-#include "RemoteControlCalibrationController.h"
-#include "Fact.h"
-#include "JoystickSettings.h"
+#include <functional>
 
-Q_DECLARE_LOGGING_CATEGORY(JoystickLog)
-Q_DECLARE_LOGGING_CATEGORY(JoystickValuesLog)
+#include "RemoteControlCalibrationController.h"
+#include "JoystickSettings.h"
 
 class MavlinkActionManager;
 class QmlObjectListModel;
@@ -39,14 +36,23 @@ class AvailableButtonAction : public QObject
     Q_PROPERTY(bool     canRepeat   READ canRepeat  CONSTANT)
 
 public:
-    AvailableButtonAction(const QString &actionName, bool canRepeat, QObject *parent = nullptr);
+    AvailableButtonAction(const QString &actionName,
+                          std::function<void()> onDown,
+                          std::function<void()> onUp = nullptr,
+                          std::function<void()> onRepeat = nullptr,
+                          QObject *parent = nullptr);
 
     const QString &action() const { return _actionName; }
-    bool canRepeat() const { return _repeat; }
+    bool canRepeat() const { return bool(_onRepeat); }
+    const std::function<void()> &onDown() const { return _onDown; }
+    const std::function<void()> &onRepeat() const { return _onRepeat; }
+    const std::function<void()> &onUp() const { return _onUp; }
 
 private:
     const QString _actionName;
-    const bool _repeat = false;
+    const std::function<void()> _onDown;
+    const std::function<void()> _onRepeat;
+    const std::function<void()> _onUp;
 };
 
 // There is only one Joystick instance active in the system at a time.
@@ -338,6 +344,9 @@ signals:
     void startContinuousZoom(int direction);
     void stopContinuousZoom();
     void stepZoom(int direction);
+    void startContinuousFocus(int direction);
+    void stopContinuousFocus();
+    void stepFocus(int direction);
     void stepCamera(int direction);
     void stepStream(int direction);
     void triggerCamera();
@@ -354,7 +363,7 @@ signals:
     void setVtolInFwdFlight(bool set);
     void setFlightMode(const QString &flightMode);
     void emergencyStop();
-    void gripperAction(QGCMAVLink::GripperActions gripperAction);
+    void gripperAction(GRIPPER_ACTIONS gripperAction);
     void landingGearDeploy();
     void landingGearRetract();
     void motorInterlock(bool enable);
@@ -477,6 +486,10 @@ private:
     static constexpr const char *_buttonActionContinuousZoomOut =  QT_TR_NOOP("Continuous Zoom Out");
     static constexpr const char *_buttonActionStepZoomIn =         QT_TR_NOOP("Step Zoom In");
     static constexpr const char *_buttonActionStepZoomOut =        QT_TR_NOOP("Step Zoom Out");
+    static constexpr const char *_buttonActionContinuousFocusIn =  QT_TR_NOOP("Continuous Focus In");
+    static constexpr const char *_buttonActionContinuousFocusOut = QT_TR_NOOP("Continuous Focus Out");
+    static constexpr const char *_buttonActionStepFocusIn =        QT_TR_NOOP("Step Focus In");
+    static constexpr const char *_buttonActionStepFocusOut =       QT_TR_NOOP("Step Focus Out");
     static constexpr const char *_buttonActionNextStream =         QT_TR_NOOP("Next Video Stream");
     static constexpr const char *_buttonActionPreviousStream =     QT_TR_NOOP("Previous Video Stream");
     static constexpr const char *_buttonActionNextCamera =         QT_TR_NOOP("Next Camera");

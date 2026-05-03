@@ -4,8 +4,6 @@
 #include <QtQml/QQmlComponent>
 #include <QtQml/QQmlContext>
 #include <QtQuick/QQuickItem>
-#include <QtTest/QSignalSpy>
-#include <QtTest/QTest>
 
 #include "LogEntry.h"
 #include "LogManager.h"
@@ -38,7 +36,7 @@ void LoggingQmlBindingTest::_singletonAccessible()
     QQmlComponent component(_engine);
     component.setData(R"(
         import QtQuick
-        import QGroundControl.Logging
+        import QGroundControl.LogManager
 
         QtObject {
             property var mgr: LogManager
@@ -85,12 +83,14 @@ void LoggingQmlBindingTest::_modelReceivesEntries()
     const int before = model->totalCount();
 
     qCWarning(LoggingQmlBindingTestLog) << "test message for model";
-    QTRY_VERIFY_WITH_TIMEOUT(model->totalCount() > before, 2000);
+    // Model update is an in-process queued signal, not I/O; a 500 ms window
+    // is generous for a local Qt signal and keeps failure feedback fast.
+    QTRY_VERIFY_WITH_TIMEOUT(model->totalCount() > before, 500);
 
     QQmlComponent component(_engine);
     component.setData(R"(
         import QtQuick
-        import QGroundControl.Logging
+        import QGroundControl.LogManager
 
         QtObject {
             property int total: LogManager.model.totalCount
@@ -112,7 +112,7 @@ void LoggingQmlBindingTest::_filterBindingsWork()
     QQmlComponent component(_engine);
     component.setData(R"(
         import QtQuick
-        import QGroundControl.Logging
+        import QGroundControl.LogManager
 
         QtObject {
             property var model: LogManager.model
@@ -143,7 +143,7 @@ void LoggingQmlBindingTest::_settingsDialogLoads()
     QQmlComponent component(_engine);
     component.setData(R"(
         import QtQuick
-        import QGroundControl.Logging
+        import QGroundControl.LogManager
 
         QtObject {
             property bool diskEnabled: LogManager.diskLoggingEnabled
