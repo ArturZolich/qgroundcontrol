@@ -110,6 +110,41 @@ Rectangle {
             text: qsTr("Expected Home Position")
         }
 
+
+        // Prompt to click map to set/move home position
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.topMargin: ScreenTools.defaultFontPixelWidth / 2
+            spacing: ScreenTools.defaultFontPixelWidth / 2
+            visible: plannedHomePositionSection.checked && _root.planMasterController.showCreateFromTemplate
+
+            Image {
+                source: "qrc:///qmlimages/MapHome.svg"
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: ScreenTools.defaultFontPixelHeight * 2
+                Layout.preferredHeight: Layout.preferredWidth
+                fillMode: Image.PreserveAspectFit
+            }
+
+            QGCLabel {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                horizontalAlignment: Text.AlignHCenter
+                text: qsTr("Click in map to set position")
+                visible: !_root.missionController.homePositionSet
+            }
+
+            QGCLabel {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                horizontalAlignment: Text.AlignHCenter
+                text: qsTr("Drag to move home position. Click to set new position.")
+                visible: _root.missionController.homePositionSet
+            }
+        }
+
+        // Normal home position controls (shown only when home is set)
+
         GridLayout {
             Layout.fillWidth: true
             columnSpacing: ScreenTools.defaultFontPixelWidth
@@ -118,15 +153,18 @@ Rectangle {
 
             QGCLabel {
                 text: qsTr("Altitude (AMSL)")
+                font.pointSize: ScreenTools.smallFontPointSize
             }
             FactTextField {
                 fact: _root._settingsItem ? _root._settingsItem.plannedHomePositionAltitude : null
                 Layout.fillWidth: true
+                font.pointSize: ScreenTools.smallFontPointSize
                 visible: _root._settingsItem && _root._settingsItem.terrainQueryFailed
             }
             QGCLabel {
                 text: _root._settingsItem ? _root._settingsItem.plannedHomePositionAltitude.valueString + " " + _root._settingsItem.plannedHomePositionAltitude.units : ""
                 Layout.fillWidth: true
+                font.pointSize: ScreenTools.smallFontPointSize
                 visible: !_root._settingsItem || !_root._settingsItem.terrainQueryFailed
             }
         }
@@ -147,6 +185,38 @@ Rectangle {
             onClicked: {
                 if (_root._settingsItem) {
                     _root._settingsItem.coordinate = _root.editorMap.center
+                }
+            }
+        }
+
+        // ── Plan Templates ──
+        SectionHeader {
+            id: planTemplateSectionHeader
+            Layout.fillWidth: true
+            text: qsTr("Plan Templates")
+            visible: _root.planMasterController.showCreateFromTemplate
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: ScreenTools.defaultFontPixelHeight / 2
+            visible: planTemplateSectionHeader.visible && planTemplateSectionHeader.checked
+            enabled: _root.missionController.homePositionSet
+            opacity: enabled ? 1.0 : 0.5
+
+            Repeater {
+                model: _root.planMasterController.planCreators
+
+                QGCButton {
+                    Layout.fillWidth: true
+                    text: object.name
+                    onClicked: {
+                        if (object.blankPlan) {
+                            _root.planMasterController.userSelectedManualCreation = true
+                        } else {
+                            object.createPlan(_root.editorMap.center)
+                        }
+                    }
                 }
             }
         }

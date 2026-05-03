@@ -54,7 +54,7 @@ AssignedButtonAction::AssignedButtonAction(const QString &actionName_, bool repe
     : actionName(actionName_)
     , repeat(repeat_)
 {
-    qCDebug(JoystickLog) << this;
+    qCDebug(JoystickVerboseLog) << this;
 }
 
 AvailableButtonAction::AvailableButtonAction(const QString &actionName_, std::function<void()> onDown_, std::function<void()> onUp_, std::function<void()> onRepeat_, QObject *parent)
@@ -64,7 +64,7 @@ AvailableButtonAction::AvailableButtonAction(const QString &actionName_, std::fu
     , _onRepeat(std::move(onRepeat_))
     , _onUp(std::move(onUp_))
 {
-    qCDebug(JoystickLog) << this;
+    qCDebug(JoystickVerboseLog) << this;
 }
 
 /*===========================================================================*/
@@ -160,7 +160,7 @@ Joystick::Joystick(const QString &name, int axisCount, int buttonCount, int hatC
 
 Joystick::~Joystick()
 {
-    _exitThread = true;
+    _exitPollingThread = true;
     if (isRunning()) {
         if (QThread::currentThread() == this) {
             qCWarning(JoystickLog) << "Skipping wait() on joystick thread";
@@ -317,6 +317,11 @@ void Joystick::_loadAxisSettings(bool joystickCalibrated, int transmitterMode)
         const int axisFunction = axisSettings.value(functionKey, maxAxisFunction).toInt();
         if (axisFunction < 0 || axisFunction > maxAxisFunction) {
             qCWarning(JoystickLog) << "Invalid function" << axisFunction << "for axis" << axis;
+            axisSettings.endGroup();
+            continue;
+        }
+        if (axisFunction == maxAxisFunction) {
+            // Older code would save unassigned axes with maxAxisFunction, we now skip loading those since that is not a valid function assignment
             axisSettings.endGroup();
             continue;
         }
@@ -486,6 +491,11 @@ void Joystick::_saveAxisSettings(int transmitterMode)
     const QString reversedKey = QString::fromLatin1(kAxisReversedKey);
 
     for (int axis = 0; axis < _axisCount; axis++) {
+        AxisFunction_t function = _getAxisFunctionForJoystickAxis(axis);
+        if (function == maxAxisFunction) {
+            // No function assigned to axis, nothing to save
+            continue;
+        }
         AxisCalibration_t *const calibration = &_rgCalibration[axis];
         axisSettings.beginGroup(QString::number(axis));
 
@@ -494,7 +504,6 @@ void Joystick::_saveAxisSettings(int transmitterMode)
         axisSettings.setValue(maxKey, calibration->max);
         axisSettings.setValue(deadbandKey, calibration->deadband);
         axisSettings.setValue(reversedKey, calibration->reversed);
-        AxisFunction_t function = _getAxisFunctionForJoystickAxis(axis);
         axisSettings.setValue(functionKey, static_cast<int>(function));
 
         qCDebug(JoystickLog)
@@ -654,7 +663,7 @@ void Joystick::run()
             }
         }
 
-        while (!_exitThread) {
+        while (!_exitPollingThread) {
             if (!_update()) {
                 qCWarning(JoystickLog) << "Joystick disconnected or update failed:" << _name;
                 updateFailed = true;
@@ -677,7 +686,7 @@ void Joystick::run()
         _close();
     }
 
-    if ((openFailed || updateFailed) && !_exitThread) {
+    if ((openFailed || updateFailed) && !_exitPollingThread) {
         qCDebug(JoystickLog) << "Triggering joystick rescan after failure";
         QMetaObject::invokeMethod(JoystickManager::instance(), "_checkForAddedOrRemovedJoysticks", Qt::QueuedConnection);
     }
@@ -732,14 +741,14 @@ void Joystick::_updateButtonEventStates(QVector<ButtonEvent_t> &buttonEventState
 
 void Joystick::_handleButtons()
 {
-    if (_currentPollingType == NotPolling) {
+    if (_pollingFlags == PollingNone) {
         qCWarning(JoystickLog) << "Internal Error: Joystick not polling!";
         return;
     }
 
     _updateButtonEventStates(_buttonEventStates);
 
-    if (_currentPollingType == PollingForConfiguration) {
+    if (_pollingFlags.testFlag(PollingForConfiguration)) {
         for (int buttonIndex = 0; buttonIndex < _totalButtonCount; buttonIndex++) {
             if (_buttonEventStates[buttonIndex] == ButtonEventDownTransition) {
                 qCDebug(JoystickLog) << "Button pressed - button" << buttonIndex;
@@ -749,7 +758,7 @@ void Joystick::_handleButtons()
                 emit rawButtonPressedChanged(buttonIndex, false);
             }
         }
-    } else if (_currentPollingType == PollingForVehicle) {
+    } else if (_pollingFlags.testFlag(PollingForVehicle)) {
         Vehicle *const vehicle = _pollingVehicle;
         if (!vehicle) {
             qCWarning(JoystickLog) << "Internal Error: No vehicle for joystick!";
@@ -893,12 +902,12 @@ void Joystick::_handleAxis()
 
     _axisElapsedTimer.start();
 
-    if (_currentPollingType == NotPolling) {
+    if (_pollingFlags == PollingNone) {
         qCWarning(JoystickLog) << "Internal Error: Joystick not polling!";
         return;
     }
 
-    if (_currentPollingType == PollingForConfiguration) {
+    if (_pollingFlags.testFlag(PollingForConfiguration)) {
         // Signal the axis values to Joystick Config/Cal. Axes in Joystick terminology are the same as Channels in
         // RemoteControlCalibrationController terminology.
         QVector<int> channelValues(_axisCount);
@@ -906,7 +915,7 @@ void Joystick::_handleAxis()
             channelValues[axisIndex] = _getAxisValue(axisIndex);
         }
         emit rawChannelValuesChanged(channelValues);
-    } else if (_currentPollingType == PollingForVehicle) {
+    } else if (_pollingFlags.testFlag(PollingForVehicle)) {
         Vehicle *const vehicle = _pollingVehicle;
         if (!vehicle) {
             qCWarning(JoystickLog) << "Internal Error: No vehicle for joystick!";
@@ -1099,20 +1108,13 @@ void Joystick::_startPollingForActiveVehicle()
 
 void Joystick::_startPollingForVehicle(Vehicle &vehicle)
 {
-    if (_currentPollingType == PollingForVehicle) {
+    qCDebug(JoystickLog) << "Starting joystick polling for vehicle. Vehicle id:" << vehicle.id() << "Current flags:" << _pollingFlagsToString(_pollingFlags);
+
+    if (_pollingFlags.testFlag(PollingForVehicle)) {
         qCWarning(JoystickLog) << "Internal Error: Joystick already polling for vehicle!";
         return;
     }
-    if (_previousPollingType != NotPolling) {
-        qCWarning(JoystickLog) << "Internal Error: Joystick previous polling type not None:" << _pollingTypeToString(_previousPollingType);
-        return;
-    }
-    if (_currentPollingType == NotPolling && isRunning()) {
-        qCWarning(JoystickLog) << "Internal Error: Joystick polling should not be running!";
-        return;
-    }
 
-    _currentPollingType = PollingForVehicle;
     _pollingVehicle = &vehicle;
 
     _buildAvailableButtonsActionList(_pollingVehicle);
@@ -1137,88 +1139,131 @@ void Joystick::_startPollingForVehicle(Vehicle &vehicle)
         (void) connect(this, &Joystick::gimbalYawStop,      gimbal, &GimbalController::gimbalYawStop);
     }
 
-    qDebug(JoystickLog) << "Started joystick polling for vehicle" << _pollingVehicle->id();
-
-    start();
+    _pollingFlags |= PollingForVehicle;
+    _startPollingThread();
 }
 
 void Joystick::_startPollingForConfiguration()
 {
-    if (_currentPollingType == PollingForConfiguration) {
+    qCDebug(JoystickLog) << "Starting joystick polling for configuration. Current flags:" << _pollingFlagsToString(_pollingFlags);
+
+    if (_pollingFlags.testFlag(PollingForConfiguration)) {
         qCWarning(JoystickLog) << "Internal Error: Joystick already polling for configuration!";
         return;
     }
-    if (_previousPollingType != NotPolling) {
-        qCWarning(JoystickLog) << "Internal Error: Joystick previous polling type not None:" << _pollingTypeToString(_previousPollingType);
-        return;
-    }
 
-    qCDebug(JoystickLog) << "Started joystick polling for configuration. Saved previous polling type:" << _pollingTypeToString(_currentPollingType);
-
-    _previousPollingType = _currentPollingType;
-    _currentPollingType = PollingForConfiguration;
-
-    if (!isRunning()) {
-        start();
-    }
+    _pollingFlags |= PollingForConfiguration;
+    _startPollingThread();
 }
 
 void Joystick::_stopPollingForConfiguration()
 {
-    if (_currentPollingType != PollingForConfiguration) {
+    qCDebug(JoystickLog) << "Stopping joystick polling for configuration. Current flags:" << _pollingFlagsToString(_pollingFlags);
+
+    if (!_pollingFlags.testFlag(PollingForConfiguration)) {
         qCWarning(JoystickLog) << "Internal Error: Joystick not polling for configuration!";
         return;
     }
+
     if (!isRunning()) {
-        qCWarning(JoystickLog) << "Internal Error: Joystick polling not running!";
-        return;
+        qCWarning(JoystickLog) << "Internal Error: Joystick polling thread not running!";
     }
 
-    qCDebug(JoystickLog) << "Stopped joystick polling for configuration. Restored previous polling type:" << _pollingTypeToString(_previousPollingType);
+    const PollingFlags remainingFlags = _pollingFlags & ~PollingFlags(PollingForConfiguration);
 
-    _currentPollingType = _previousPollingType;
-    _previousPollingType = NotPolling;
+    // Stop the thread BEFORE updating _pollingFlags. If we cleared the flags first and the
+    // thread was still running, _handleButtons()/_handleAxis() would see PollingNone and
+    // fire a spurious "Internal Error: Joystick not polling!" warning.
+    if (remainingFlags == PollingNone) {
+        _stopPollingThread();
+    }
 
-    if (_currentPollingType == NotPolling) {
-        _exitThread = true;
+    _pollingFlags = remainingFlags;
+    qCDebug(JoystickLog) << "Remaining flags:" << _pollingFlagsToString(_pollingFlags);
+
+    if (remainingFlags.testFlag(PollingForVehicle) && !isRunning()) {
+        qCWarning(JoystickLog) << "Internal Error: Joystick polling not running! Forcing start of polling thread. Continuing polling for vehicle.";
+        _startPollingThread();
     }
 }
 
-void Joystick::_stopAllPolling()
+void Joystick::_stopAllPollingForVehicle()
 {
+    qCDebug(JoystickLog) << "Stopping all joystick polling for vehicle. Current flags:" << _pollingFlagsToString(_pollingFlags);
+
     if (_pollingVehicle) {
         (void) disconnect(this, nullptr, _pollingVehicle, nullptr);
         (void) disconnect(_pollingVehicle, &Vehicle::flightModesChanged, this, &Joystick::_flightModesChanged);
         if (GimbalController *const gimbal = _pollingVehicle->gimbalController()) {
             (void) disconnect(this, nullptr, gimbal, nullptr);
         }
-        _pollingVehicle = nullptr;
+        if (!isRunning()) {
+            qCWarning(JoystickLog) << "Joystick polling thread not running even though _pollingVehicle was set.";
+        }
     }
 
-    qCDebug(JoystickLog) << "Stopped all joystick polling";
+    const PollingFlags remainingFlags = _pollingFlags & ~PollingFlags(PollingForVehicle);
 
-    _currentPollingType = NotPolling;
-    _previousPollingType = NotPolling;
+    // Stop the thread BEFORE updating _pollingFlags. If we cleared the flags first and the
+    // thread was still running, _handleButtons()/_handleAxis() would see PollingNone and
+    // fire a spurious "Internal Error: Joystick not polling!" warning.
+    if (remainingFlags == PollingNone) {
+        _stopPollingThread();
+    }
 
-    if (isRunning()) {
-        _exitThread = true;
+    // Clear _pollingVehicle AFTER updating _pollingFlags so the polling thread never sees
+    // PollingForVehicle set with a null _pollingVehicle, which would fire spurious
+    // "Internal Error: No vehicle for joystick!" warnings.
+    _pollingVehicle = nullptr;
+    _pollingFlags = remainingFlags;
+    qCDebug(JoystickLog) << "Remaining flags:" << _pollingFlagsToString(_pollingFlags);
+
+    if (remainingFlags.testFlag(PollingForConfiguration) && !isRunning()) {
+        qCWarning(JoystickLog) << "Joystick polling thread not running but configuration polling flag set. Forcing start.";
+        _startPollingThread();
     }
 }
 
-QString Joystick::_pollingTypeToString(PollingType pollingType) const
+void Joystick::_startPollingThread()
 {
-    switch (pollingType) {
-    case NotPolling:
-        return QStringLiteral("NotPolling");
-    case PollingForConfiguration:
-        return QStringLiteral("PollingForConfiguration");
-    case PollingForVehicle:
-        return QStringLiteral("PollingForVehicle");
-    default:
-        break;
+    if (isRunning()) {
+        qCDebug(JoystickLog) << "Polling thread already running. Flags:" << _pollingFlagsToString(_pollingFlags);
+    } else {
+        qCDebug(JoystickLog) << "Starting polling thread. Flags:" << _pollingFlagsToString(_pollingFlags);
+        _exitPollingThread = false;
+        start();
     }
+}
 
-    return QStringLiteral("UnknownPollingType");
+void Joystick::_stopPollingThread()
+{
+    if (isRunning()) {
+        qCDebug(JoystickLog) << "Stopping polling thread. Flags:" << _pollingFlagsToString(_pollingFlags);
+        _exitPollingThread = true;
+        if (QThread::currentThread() == this) {
+            qCWarning(JoystickLog) << "Skipping wait() on joystick thread to avoid deadlock";
+        } else {
+            wait();
+        }
+        // _exitPollingThread is reset to false in _startPollingThread() before the next start()
+    } else {
+        qCDebug(JoystickLog) << "Polling thread already stopped. Flags:" << _pollingFlagsToString(_pollingFlags);
+    }
+}
+
+QString Joystick::_pollingFlagsToString(PollingFlags flags) const
+{
+    if (flags == PollingNone) {
+        return QStringLiteral("None");
+    }
+    QStringList parts;
+    if (flags.testFlag(PollingForVehicle)) {
+        parts << QStringLiteral("PollingForVehicle");
+    }
+    if (flags.testFlag(PollingForConfiguration)) {
+        parts << QStringLiteral("PollingForConfiguration");
+    }
+    return parts.join(QStringLiteral("|"));
 }
 
 void Joystick::setAxisCalibration(int axis, const AxisCalibration_t &calibration)
@@ -1735,7 +1780,7 @@ Joystick::AxisFunction_t Joystick::_getAxisFunctionForJoystickAxis(int joystickA
 
 void Joystick::stop()
 {
-    _exitThread = true;
+    _exitPollingThread = true;
     if (isRunning()) {
         if (QThread::currentThread() == this) {
             qCWarning(JoystickLog) << "Skipping wait() on joystick thread";

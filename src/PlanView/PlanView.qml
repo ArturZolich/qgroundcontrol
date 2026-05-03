@@ -315,7 +315,10 @@ Item {
 
                 switch (_editingLayer) {
                 case _layerMission:
-                    if (_addROIOnClick) {
+
+                    if (_planMasterController.showCreateFromTemplate) {
+                        _missionController.setHomePosition(coordinate)
+                    } else if (_addROIOnClick) {
                         _addROIOnClick = false
                         if (_missionController.isROIActive) {
                             var pos = Qt.point(mouse.x, mouse.y)
